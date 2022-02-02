@@ -16,6 +16,8 @@ def load_mnist(is_train= True, flatten= True):
 
     if flatten:
         x = x.view(x.size(0), -1) # 28 * 28
+    else:
+        x = x[:, None, :, :] # numObs, 1, 28, 28
 
     return x, y
 
@@ -40,21 +42,21 @@ def split_data(x, y, train_ratio= 0.8):
 
     return x, y
 
-def get_hidden_sizes(input_size, output_size, n_layers):
-    # creates hidden layers in an arithmetical way.
-    step_size = int((input_size-output_size)/ n_layers)
-    # example:
-    # input_size = 100, n_layers = 3, ouput_size= 10
-    # (100-10)//3 = 90//3 = 30
-    # 100 --> 70 --> 40 --> 10!
-    # hiddens = [70, 40]
+# def get_hidden_sizes(input_size, output_size, n_layers):
+#     # creates hidden layers in an arithmetical way.
+#     step_size = int((input_size-output_size)/ n_layers)
+#     # example:
+#     # input_size = 100, n_layers = 3, ouput_size= 10
+#     # (100-10)//3 = 90//3 = 30
+#     # 100 --> 70 --> 40 --> 10!
+#     # hiddens = [70, 40]
 
-    hidden_sizes = []
-    current_size = input_size - step_size
-    while current_size > output_size:
-        hidden_sizes.append(current_size)
-        current_size -= step_size
+#     hidden_sizes = []
+#     current_size = input_size - step_size
+#     while current_size > output_size:
+#         hidden_sizes.append(current_size)
+#         current_size -= step_size
     
-    return hidden_sizes
+#     return hidden_sizes
 
 

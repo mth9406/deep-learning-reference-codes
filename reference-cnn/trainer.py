@@ -3,6 +3,13 @@ from enum import EnumMeta
 import enum
 import numpy as np
 import torch  
+from torchvision import transforms
+
+# Data augmentation
+data_transform = transforms.Compose(
+    [transforms.RandomRotation(10), 
+    transforms.GaussianBlur(5,sigma=(0.5,1))
+    ])
 
 class Trainer():
     
@@ -35,6 +42,10 @@ class Trainer():
         total_loss = 0.0
         
         for i, (x_i, y_i) in enumerate(zip(x,y)):
+            x_aug_i = data_transform(x_i)
+            # torch.vstack((a,b))
+            x_i = torch.vstack((x_i, x_aug_i))
+            y_i = torch.hstack((y_i, y_i))
             y_hat_i = self.model(x_i) # prediction per batch
             loss_i = self.crit(y_hat_i, y_i.squeeze()) # loss per batch
             
