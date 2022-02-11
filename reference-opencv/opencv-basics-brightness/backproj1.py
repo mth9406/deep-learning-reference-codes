@@ -1,45 +1,43 @@
 import cv2
 import numpy as np
+import sys
 import argparse
 
 def argparser():
     p = argparse.ArgumentParser()
-    p.add_argument('--src', type=str, default = r'./data/field.bmp')
+    p.add_argument('--src', type= str, default = './data/cropland.png')
     config = p.parse_args()
     return config
 
 def main(config):
     src = cv2.imread(config.src, cv2.IMREAD_COLOR)
+    
+    if src is None:
+        print('--(!)Image load failed...')
+        sys.exit()
 
-    x, y, w, h = cv2.selectROI(src) # width, height, width, height
+    x, y, w, h = cv2.selectROI(src) 
+    # we can select ROI using mouse drag
+    # w: cols
+    # h: rows
+    # bbox: [y:y+h, x:x+w]
     src_ycrcb = cv2.cvtColor(src, cv2.COLOR_BGR2YCrCb)
     crop = src_ycrcb[y:y+h, x:x+w]
 
-    # backprojection
-    # apply histogram stretching in YCrCb format.  
-    # get histogram.
-    channels = [1,2]
-    mask = None
+    # calculates histogram.
+    channels = [1, 2] # use cr, cb; exclude y-channel (brightness) 
+    cr_bins = 128 
+    cb_bins = 128
+    histSize= [cr_bins, cb_bins]
+    cr_range = [0, 256]
+    cb_range = [0, 256]
+    ranges = cr_range+cb_range
+
+    hist = cv2.calcHist([crop], channels, None, histSize, ranges)
+    hist_norm = cv2.normalize(hist, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
+
+    # back project 
+    backproj = cv2.calc
+
+
     
-    histsize = [128,128] # bins.
-    ranges = [0,256,0,256]
-
-    hist = cv2.calcHist([crop], channels, mask, histsize, ranges)
-    # calculates histogram of the selected RoI.
-    # we only use cr, cb channels.
-    # hist_norm = cv2.normalize(hist, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
-
-    backproj = cv2.calcBackProject([src_ycrcb], channels, hist, ranges, 1)
-    dst = cv2.copyTo(src, backproj)
-    
-    cv2.imshow('backproj', backproj)
-    # cv2.imshow('hist_norm', hist_norm)
-    cv2.imshow('dst', dst)
-    cv2.waitKey()
-    cv2.destroyAllWindows()
-
-
-
-if __name__ == '__main__':
-    config = argparser()
-    main(config)

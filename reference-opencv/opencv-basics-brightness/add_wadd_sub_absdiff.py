@@ -1,7 +1,7 @@
 import cv2
 import matplotlib.pyplot as plt
 import sys
-
+# import torch 
 
 src1 = cv2.imread('./data/lenna256.bmp', cv2.IMREAD_GRAYSCALE)
 src2 = cv2.imread('./data/square.bmp', cv2.IMREAD_GRAYSCALE)
