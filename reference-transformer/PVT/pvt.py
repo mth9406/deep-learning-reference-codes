@@ -167,12 +167,12 @@ class PyramidVisionTransformer(nn.Module):
         for i in range(num_stages): # 0, 1, 2, 3
             
             # patch embedding of i'th layer
-            patch_embd = PatchEmbed(img_size if i == 0 else img_size//2**(i+1), 
+            patch_embed = PatchEmbed(img_size if i == 0 else img_size//2**(i+1), 
                                     patch_size=patch_size if i == 0 else 2, 
                                     # img_size, img_size // 4, img_size // 8, img_size // 16 , img_size//32
                                     in_chans= in_chans if i == 0 else embed_dims[i-1],
                                     embed_dims= embed_dims[i])
-            num_patches = patch_embd.num_patches if i != num_stages -1 else patch_embd.num_patches + 1
+            num_patches = patch_embed.num_patches if i != num_stages -1 else patch_embed.num_patches + 1
             pos_embed = nn.Parameter(torch.zeroes(1, num_patches, embed_dims[i]))
             pos_drop = nn.Dropout(drop_rate)
 
@@ -186,7 +186,14 @@ class PyramidVisionTransformer(nn.Module):
                 ) for j in range(depths[i])]
             ) 
             cur += depths[i]
-        
+
+            setattr(self, f"patch_embed{i + 1}", patch_embed)
+            setattr(self, f"pos_embed{i + 1}", pos_embed)
+            setattr(self, f"pos_drop{i + 1}", pos_drop)
+            setattr(self, f"block{i + 1}", block)
+
+            trunc_normal_(pos_embed, std= 0.02)
+
         # init weights
         self.apply(self._init_weights)
 
