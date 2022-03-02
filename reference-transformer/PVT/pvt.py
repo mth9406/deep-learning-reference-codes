@@ -40,7 +40,7 @@ class Attention(nn.Module):
     def __init__(self, dim, num_heads= 8, qkv_bias= False, qk_scale= None, 
                 attn_drop= 0., proj_drop= 0., sr_ratio= 1):
         super().__init__()
-        assert dim & num_heads == 0, f"dim {dim} should be divided by num_heads {num_heads}"
+        assert dim % num_heads == 0, f"dim {dim} should be divided by num_heads {num_heads}"
 
         self.dim = dim
         self.num_heads = num_heads
@@ -75,7 +75,7 @@ class Attention(nn.Module):
             # B, N, (2C) -> B, N, 2, num_heads, C//num_heads -> 2, B, num_heads, N, C//num_heads
         k, v = kv[0], kv[1]
 
-        attn = F.softmax(q@v.transpose(-2,-1)*self.scale, dim= -1)
+        attn = F.softmax(q@k.transpose(-2,-1)*self.scale, dim= -1)
         attn = self.attn_drop(attn) # B, num_heads, N, N
 
         x = attn@v # B, num_heads, N, C//num_heads
@@ -124,7 +124,6 @@ class Block(nn.Module):
 class PatchEmbed(nn.Module):
     '''Image to patch embedding
     '''
-
     def __init__(self, img_size= 224, patch_size= 16, in_channels= 3, emb_size= 768):
         super().__init__()
         img_size = to_2tuple(img_size) # (img_size, img_size)
@@ -144,9 +143,10 @@ class PatchEmbed(nn.Module):
         B, C, H, W = x.shape
 
         x = self.proj(x).flatten(2).transpose(1,2) 
-        # B, C, H, W -> B emb_size, H/P W/P -> B emb_size HW/P^2 -> B HW/P^2 emb_size
+        # B, C, H, W -> B emb_size, H/P W/P 
+        # -> B emb_size HW/P^2 -> B HW/P^2 emb_size
         x = self.norm(x)
-        H, W = H // self.patch_size, W // self.patch_size
+        H, W = H // self.patch_size[0], W // self.patch_size[1]
         
         return x, (H, W)
 
