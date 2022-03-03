@@ -7,19 +7,17 @@ from timm.models.vision_transformer import _cfg
 
 
 class Mlp(nn.Module):
-    
-    def __init__(self, 
-                 in_features: int,
-                 hidden_features: int,
-                 out_features: int,
-                 act_layer = nn.GELU,
-                 drop= 0.
-                ):
-        hidden_features = hidden_features or in_features
-        out_features = out_features or in_features
+    def __init__(self, in_features:int, 
+                        hidden_features=None, 
+                        out_features=None, 
+                        act_layer=nn.GELU, 
+                        drop:float =0.):
+
         super().__init__()
+        out_features = out_features or in_features
+        hidden_features = hidden_features or in_features
         self.fc1 = nn.Linear(in_features, hidden_features)
-        self.act = act_layer
+        self.act = act_layer()
         self.fc2 = nn.Linear(hidden_features, out_features)
         self.drop = nn.Dropout(drop)
 
@@ -100,8 +98,7 @@ class SpatialReductionAttention(nn.Module):
 class TransformerEncoderBlock(nn.Module):
 
     def __init__(self, 
-                 dim: int, 
-                 num_heads: int,
+                 dim: int, num_heads: int,
                  mlp_ratio: int = 4, 
                  qkv_bias: bool = False, 
                  qk_scale = None, 
@@ -124,7 +121,8 @@ class TransformerEncoderBlock(nn.Module):
         )
         self.norm2 = norm_layer(dim)
         mlp_hidden_dim = int(dim*mlp_ratio)
-        self.mlp = Mlp(in_features= dim, hidden_features= mlp_hidden_dim,
+        self.mlp = Mlp(in_features= dim, hidden_features= mlp_hidden_dim, 
+                        out_features= dim,
                         act_layer= act_layer, drop= proj_drop)
     
     def forward(self, x, H, W):
@@ -168,14 +166,95 @@ class PatchEmbed(nn.Module):
 
         return x, (H, W)
 
-patchemb = PatchEmbed(dim = 64)
-sra = SpatialReductionAttention(dim = 64, sr_ratio= 2)
+class PyramidVisionTransformer(nn.Module):
+
+    def __init__(self, img_size= 224, patch_size= 16, in_chans= 3,
+                 num_classes= 1000, embed_dims=[64, 128, 256, 512],
+                 num_heads= [1, 2, 4, 8], mlp_ratio= [4, 4, 4, 4],
+                 qkv_bias= False, qk_scale=None, 
+                 drop_rate= 0., attn_drop_rate= 0,
+                 norm_layer= nn.LayerNorm, 
+                 depths= [3, 4, 6, 3],
+                 sr_ratios= [8, 4, 2, 1], 
+                 num_stages= 4,
+                 F4= False
+                ):
+        super().__init__()
+        self.num_classes = num_classes
+        self.depths = depths # the number of encoder blocks per transformer layer = [3, 4, 6, 3]
+        self.F4 = F4
+        self.num_stages = num_stages # the number of transformer layers = 4
+        
+        for i in range(num_stages):
+
+            # patch embedding of i'th stage
+            patch_embed = PatchEmbed(
+                img_size= img_size if i == 0 else img_size//(2**(i+1)),
+                patch_size= patch_size if i == 0 else 2,
+                in_chans= in_chans if i == 0 else embed_dims[i-1],
+                dim = embed_dims[i]
+            )
+            num_patches = patch_embed.num_patches if i != num_stages-1 else patch_embed.num_patches+1
+            pos_embed = nn.Parameter(torch.zeros(1, num_patches, embed_dims[i]))
+            pos_drop = nn.Dropout(drop_rate)
+            
+            # transformer blocks
+            block = nn.ModuleList(
+                [TransformerEncoderBlock(
+                    embed_dims[i], num_heads[i], mlp_ratio[i],
+                    qkv_bias, qk_scale, drop_rate, attn_drop_rate, 
+                    norm_layer= norm_layer, sr_ratio= sr_ratios[i]
+                ) for _ in range(depths[i])]
+            )
+
+            setattr(self, f'patch_embed{i+1}', patch_embed)
+            setattr(self, f'pos_embed{i+1}', pos_embed)
+            setattr(self, f'pos_drop{i+1}', pos_drop)
+            setattr(self, f'block{i+1}', block)
+
+            trunc_normal_(pos_embed, std=0.02)
+        
+    def _get_pos_embed(self, pos_embed, patch_embed, H, W):
+        if H * W == self.patch_embed1.num_patches:
+            return pos_embed
+        else:
+            return F.interpolate(
+                pos_embed.reshape(1, patch_embed.H, patch_embed.W, -1).permute(0, 3, 1, 2),
+                size=(H, W), mode="bilinear").reshape(1, -1, H * W).permute(0, 2, 1)            
+    
+    def forward(self, x):
+        outs = []
+        B = x.shape[0]
+
+        for i  in range(self.num_stages):
+            patch_embed = getattr(self, f"patch_embed{i+1}")
+            pos_embed = getattr(self, f"pos_embed{i+1}")
+            pos_drop = getattr(self, f"pos_drop{i+1}")
+            block = getattr(self, f"block{i+1}")
+            x, (H,W) = patch_embed(x)
+            if i == self.num_stages -1:
+                pos_embed = self._get_pos_embed(pos_embed[:,1:], patch_embed, H, W)
+            else:
+                pos_embed = self._get_pos_embed(pos_embed, patch_embed, H, W)
+            x = pos_drop(x+pos_embed)
+            for blk in block:
+                x = blk(x, H, W)
+            x = x.reshape(B, H, W, -1).permute(0, 3, 1, 2).contiguous()
+            outs.append(x)
+        
+        return outs
+        
+
+
 
 x = torch.randn(1, 3, 224, 224)
-patches, hw = patchemb(x)
-out = sra(patches, *hw)
+pvt = PyramidVisionTransformer()
 
-print(x.shape)
-print(patches.shape)
-print(out.shape)
-        
+outs = pvt(x)
+for i, out in enumerate(outs):
+    print(f'{i}th shape: {out.shape}')
+# default model outputs.
+# b, 64, 14, 14
+# b, 128, 7, 7
+# b, 256, 3, 3
+# b, 512, 1, 1

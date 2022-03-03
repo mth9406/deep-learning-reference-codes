@@ -113,7 +113,7 @@ class Block(nn.Module):
         # deactivate some weights in a block.
         self.norm2 = norm_layer(dim)
         mlp_hidden_dim = int(dim*mlp_ratio)
-        self.mlp = Mlp(in_features=dim, hidden_features= mlp_hidden_dim, 
+        self.mlp = Mlp(in_features=dim, hidden_features= mlp_hidden_dim, out_features= dim,
                         act_layer= act_layer, drop= proj_drop)
         
     def forward(self, x, H, W):
@@ -173,7 +173,7 @@ class PyramidVisionTransformer(nn.Module):
                                     in_chans= in_chans if i == 0 else embed_dims[i-1],
                                     embed_dims= embed_dims[i])
             num_patches = patch_embed.num_patches if i != num_stages -1 else patch_embed.num_patches + 1
-            pos_embed = nn.Parameter(torch.zeroes(1, num_patches, embed_dims[i]))
+            pos_embed = nn.Parameter(torch.zeros(1, num_patches, embed_dims[i]))
             pos_drop = nn.Dropout(drop_rate)
 
             # blocks of i'th layer
